@@ -7,7 +7,7 @@ FibaCloud.com WiseCP Reseller Modules
 - Login to WseCP admin panel;
 - Go to Products / Services > Hosting/Server > Shared Server Settings > Add New Shared Server
 - Hostname: **Label**
-- Sunucu Otomasyon Türü: **FibaCloud**
+- Server Automation Type: **FibaCloud**
 - IP Adresi: **cloud.fibacloud.com**
 - Username: **Cloud Account Email**
 - Password: **Cloud Account Password**
