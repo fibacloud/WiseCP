@@ -11,7 +11,7 @@ FibaCloud.com WiseCP Reseller Modules
 - IP Adresi: **cloud.fibacloud.com**
 - Username: **Cloud Account Email**
 - Password: **Cloud Account Password**
-- Yükseltme/Düşürme Ayarları: **Silinmesin**
+- Upgrade/Downgrade Settings: **Silinmesin**
 - Click on the **Add New Shared Server button**
 
 ## OS Requirement Configuration
