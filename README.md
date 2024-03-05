@@ -19,7 +19,7 @@ FibaCloud.com WiseCP Reseller Modules
 - Requirement Name: **OS**
 - Requirement Group: **Servers**
 - Related Product Group: **Server**
-- Difficulty: **yes**
+- Difficulty: **enabled**
 - Configurable Options: **FibaCloud Operating System**
 - Option Type: **Dropdown Menu (Selectbox)**
 - Options:
@@ -44,8 +44,11 @@ FibaCloud.com WiseCP Reseller Modules
  - Go to Products/Services > Hosting/Server > Server Packages
  - Edit or Create a Package
     - Go To **Automation Settings**
-    - Master Server: **FibaCloud**
-    - Select Product: FibaCloud Server Package That Will Match the Package You Edited
-    - Promo Code: If you have a promotional code, you can pass the code via API.
-    - Automatic Installation: **Enabled**
-    - Save Settings
+       - Master Server: **FibaCloud**
+       - Select Product: FibaCloud Server Package That Will Match the Package You Edited
+       - Promo Code: If you have a promotional code, you can pass the code via API.
+       - Automatic Installation: **Enabled**
+       - Save Settings
+    - Go To **Requirements**
+       - Enable **OS**
+       - Save Settings
