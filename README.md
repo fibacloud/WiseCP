@@ -2,7 +2,7 @@
 FibaCloud.com WiseCP Reseller Modules
 
 ## Installation
-- Download latest module [release](https://github.com/fibacloud/WiseCP/blob/main/FibaCloud_WiseCP_V1.zip);
+- Download latest module [release](https://github.com/fibacloud/WiseCP/raw/main/FibaCloud_WiseCP_V1.zip);
 - Upload archive folder contents to your WiseCP installation root directory;
 - Login to WseCP admin panel;
 - Go to Products / Services > Hosting/Server > Shared Server Settings > Add New Shared Server
