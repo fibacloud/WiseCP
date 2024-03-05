@@ -1,0 +1,23 @@
+<?php
+    return [
+        'productname'           => "Ürün Seçin",
+        'productnamedesc'       => "Lütfen bu hizmetle eşleştirilecek bir ürün seçiniz.",
+        'promocodename'         => "Promosyon Kodu",
+        'promocodedesc'         => "İsteğe bağlı promosyon kodu. API üstünden gönderilen siparişlere uygulanır.",
+        'change-password'       => "Şifre Değiştir",
+        'turn-back'             => "Geri Dön",
+        'restart'               => "Reset At",
+        'start'                 => "Başlat",
+        'starting'              => 'Başlatılıyor',
+        'stop'                  => "Durdur",
+        'stopping'              => 'Durduruluyor',
+        'hardstop'              => 'Zorla Durdur',
+        'reboot'                => "Reboot",
+        'rebuild'               => 'Yeniden Oluştur',
+        'apply'                 => "Uygula",
+        'successful'            => "İşlem Başarıyla Gerçekleştirildi",
+        'error'                 => "İşlem Başarısız Oldu",
+        'rebuildconfirm'        => 'Bu işlem sunucunuzu yeniden oluşturacaktır. Mevcut tüm verileriniz silinecektir. Devam etmek istiyor musunuz?',
+        'rebuildsuccessful'     => "Yeniden Kurma Başarıyla İşleme Alındı. Lütfen işlemin tamamlanması için 5-10 dakika bekleyin. Kurulacak İşletim Sistemi:",
+        'rebuilderoor'          => "İşlem Yapılırken Hata İle Karşılaşıldı. Lütfen Desteğe Başvurun. Hata Çıktısı:",
+    ];
