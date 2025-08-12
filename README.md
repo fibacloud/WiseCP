@@ -15,7 +15,7 @@ This module follows a specific API workflow for VPS provisioning:
 - Validates OS compatibility with selected product
 
 ### 3. Order Creation
-- Sends POST request to `/api/order/instances/{product_id}`
+- Sends POST request to `/api/order/{product_id}`
 - Includes OS template ID and OS ID in custom fields
 - Returns order ID for tracking
 
