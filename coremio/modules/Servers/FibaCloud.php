@@ -196,7 +196,7 @@ public function create(array $order_options=[]) {
     }
     
     // Step 2: Send order via POST
-    $url = "https://cloud.fibacloud.com/api/order/instances/{$product_id}";
+    $url = "https://cloud.fibacloud.com/api/order/{$product_id}";
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
