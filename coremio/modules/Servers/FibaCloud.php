@@ -158,8 +158,55 @@ public function create(array $order_options=[]) {
     $osInfoUrl = "https://cloud.fibacloud.com/api/order/{$product_id}";
     $osInfoResponse = $this->callAPI('GET', $osInfoUrl);
     
+    // Debug logging
+    self::save_log(
+        'Servers',
+        $this->_name,
+        'create',
+        [
+            'product_id' => $product_id,
+            'api_url' => $osInfoUrl,
+            'api_response' => $osInfoResponse
+        ],
+        'API Response Debug',
+        ''
+    );
+    
+    // Try alternative endpoints if main one fails
     if (!$osInfoResponse || !isset($osInfoResponse['product']['config']['forms'])) {
-        $this->error = 'Failed to get product information from API.';
+        $alternativeEndpoints = [
+            "https://cloud.fibacloud.com/api/products/{$product_id}",
+            "https://cloud.fibacloud.com/api/package/{$product_id}",
+            "https://cloud.fibacloud.com/api/service/{$product_id}"
+        ];
+        
+        foreach ($alternativeEndpoints as $altUrl) {
+            $altResponse = $this->callAPI('GET', $altUrl);
+            
+            self::save_log(
+                'Servers',
+                $this->_name,
+                'create',
+                [
+                    'product_id' => $product_id,
+                    'alternative_url' => $altUrl,
+                    'alternative_response' => $altResponse
+                ],
+                'Alternative Endpoint Test',
+                ''
+            );
+            
+            if ($altResponse && isset($altResponse['product']['config']['forms'])) {
+                $osInfoResponse = $altResponse;
+                $osInfoUrl = $altUrl;
+                break;
+            }
+        }
+    }
+    
+    if (!$osInfoResponse || !isset($osInfoResponse['product']['config']['forms'])) {
+        $this->error = 'Failed to get product information from API. Tried endpoints: ' . 
+                       $osInfoUrl . ' and alternatives. Response: ' . json_encode($osInfoResponse);
         return false;
     }
     
@@ -1089,7 +1136,7 @@ public function testConnection() {
             ];
         }
         
-        // Test API connection by getting available products
+        // Test 1: Basic API connection
         $testUrl = "https://cloud.fibacloud.com/api/order";
         $response = $this->callAPI('GET', $testUrl);
         
@@ -1107,9 +1154,41 @@ public function testConnection() {
             ];
         }
         
+        // Test 2: Try to get available products
+        $products = [];
+        if (isset($response['products'])) {
+            $products = $response['products'];
+        } elseif (isset($response['items'])) {
+            $products = $response['items'];
+        }
+        
+        // Test 3: Try to get specific product info (test with first available product)
+        $productTestResult = '';
+        if (!empty($products)) {
+            $firstProduct = is_array($products) ? reset($products) : $products;
+            $productId = is_array($firstProduct) ? $firstProduct['id'] : $firstProduct;
+            
+            if ($productId) {
+                $productUrl = "https://cloud.fibacloud.com/api/order/{$productId}";
+                $productResponse = $this->callAPI('GET', $productUrl);
+                
+                if ($productResponse && isset($productResponse['product'])) {
+                    $productTestResult = "Product endpoint working. Found product: " . 
+                        ($productResponse['product']['name'] ?? 'Unknown');
+                } else {
+                    $productTestResult = "Product endpoint failed. Response: " . json_encode($productResponse);
+                }
+            }
+        }
+        
         return [
             'status' => 'success',
-            'message' => 'API connection successful'
+            'message' => 'API connection successful',
+            'details' => [
+                'available_products' => count($products),
+                'product_test' => $productTestResult,
+                'api_response_structure' => array_keys($response)
+            ]
         ];
         
     } catch (Exception $e) {
