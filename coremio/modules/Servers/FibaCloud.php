@@ -304,7 +304,7 @@ public function terminate() {
     try {
         $config = $this->order["options"]["config"];
         $order = $config["orderId"];
-        $url = "https://cloud.fibacloud.com/api/service/instances/$order/cancel";
+        $url = "https://cloud.fibacloud.com/api/service/$order/cancel";
 
         $username = $this->server["username"];
         $password = $this->server["password"];
