@@ -30,16 +30,73 @@ private function callAPI($method, $url, $data = false) {
     curl_setopt($curl, CURLOPT_URL, $url);
     curl_setopt($curl, CURLOPT_HTTPHEADER, array($authHeader, 'Content-Type: application/json'));
     curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 30);
+    curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 10);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
 
     $result = curl_exec($curl);
+    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
     if (curl_errno($curl)) {
         $error_msg = curl_error($curl);
+        curl_close($curl);
+        
+        // Log the error
+        self::save_log(
+            'Servers',
+            $this->_name,
+            'callAPI',
+            ['url' => $url, 'method' => $method, 'data' => $data],
+            'cURL Error: ' . $error_msg,
+            ''
+        );
+        
+        return false;
     }
 
     curl_close($curl);
 
-    return json_decode($result, true);
+    // Check HTTP status code
+    if ($httpCode >= 400) {
+        self::save_log(
+            'Servers',
+            $this->_name,
+            'callAPI',
+            ['url' => $url, 'method' => $method, 'data' => $data, 'http_code' => $httpCode],
+            'API Error: HTTP ' . $httpCode,
+            $result
+        );
+        
+        if ($httpCode == 401) {
+            $this->error = 'Authentication failed. Please check username and password.';
+        } elseif ($httpCode == 403) {
+            $this->error = 'Access denied. Please check API permissions.';
+        } elseif ($httpCode == 404) {
+            $this->error = 'API endpoint not found.';
+        } else {
+            $this->error = 'API request failed with HTTP ' . $httpCode;
+        }
+        
+        return false;
+    }
+
+    $decoded = json_decode($result, true);
+    
+    // Check if response is valid JSON
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        self::save_log(
+            'Servers',
+            $this->_name,
+            'callAPI',
+            ['url' => $url, 'method' => $method, 'data' => $data],
+            'Invalid JSON response',
+            $result
+        );
+        return false;
+    }
+
+    return $decoded;
 }
 function __construct($server,$options=[]) {
             $this->_name = __CLASS__;
@@ -97,8 +154,14 @@ public function create(array $order_options=[]) {
     $username = $this->server["username"];
     $password = $this->server["password"];
     
+    // Step 1: Get product information and OS mapping
     $osInfoUrl = "https://cloud.fibacloud.com/api/order/{$product_id}";
     $osInfoResponse = $this->callAPI('GET', $osInfoUrl);
+    
+    if (!$osInfoResponse || !isset($osInfoResponse['product']['config']['forms'])) {
+        $this->error = 'Failed to get product information from API.';
+        return false;
+    }
     
     $templateId = null;
     foreach ($osInfoResponse['product']['config']['forms'] as $form) {
@@ -128,10 +191,11 @@ public function create(array $order_options=[]) {
     }
 
     if (!$osId) {
-        $this->error = 'OS ID could not be found for the selected OS.';
+        $this->error = 'OS ID could not be found for the selected OS: ' . $selectedOsName;
         return false;
     }
     
+    // Step 2: Send order via POST
     $url = "https://cloud.fibacloud.com/api/order/instances/{$product_id}";
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -155,7 +219,6 @@ public function create(array $order_options=[]) {
         return false;
     }
 
-    sleep(5);
     $httpStatusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
@@ -165,56 +228,97 @@ public function create(array $order_options=[]) {
     }
 
     $result = json_decode($response, true);
-    if(isset($result['items'][0]['id'])) {
-        $this->orderId = $result['items'][0]['id'];
-        sleep(25);
-        $orderDetailsUrl = "https://cloud.fibacloud.com/api/service/{$this->orderId}/vms/";
-        $orderDetailsResponse = $this->callAPI('GET', $orderDetailsUrl);
-        sleep(25);
-        if (isset($orderDetailsResponse['vms'])) {
-            $vmId = array_key_first($orderDetailsResponse['vms']);
-            $this->vmId = $vmId;
-            
-            $vmDetailsUrl = "https://cloud.fibacloud.com/api/service/{$this->orderId}/vms/{$vmId}";
-            $vmDetailsResponse = $this->callAPI('GET', $vmDetailsUrl);
-
-            if (isset($vmDetailsResponse['vm'])) {
-                $vm = $vmDetailsResponse['vm'];
-
-                return [
-                    'ip' => $vm['ipv4'],
-                    'assigned_ips' => [$vm['ipv4'], $vm['ipv6']],
-                    'login' => [
-                        'username' => $vm['username'],
-                        'password' => $vm['password'],
-                    ],
-                    'config' => [
-                        $this->entity_id_name => $vm['id'],
-                        'orderId' => $this->orderId,
-                        'status' => $vm['status'],
-                        'memory' => $vm['memory'],
-                        'disk' => $vm['disk'],
-                        'uptime' => $vm['uptime'],
-                        'template_name' => $vm['template_name'],
-                        'cores' => $vm['cores'],
-                        'sockets' => $vm['sockets'],
-                        'mac' => $vm['mac'],
-                        'label' => $vm['label'],
-                        'cpus' => $vm['cpus'],
-                    ],
-                ];
-            } else {
-                $this->error = 'VM details could not be retrieved.';
-                return true;
-            }
-        } else {
-            $this->error = 'Order details could not be retrieved.';
-            return false;
-        }
-    } else {
-        $this->error = $result['message'] ?? 'An unknown error occurred.';
+    if(!isset($result['items'][0]['id'])) {
+        $this->error = 'Order ID not found in API response: ' . json_encode($result);
         return false;
     }
+    
+    $this->orderId = $result['items'][0]['id'];
+    
+    // Step 3: Wait for service to become active and get VM ID
+    $vmId = $this->waitForServiceActive($this->orderId);
+    if (!$vmId) {
+        $this->error = 'Failed to get VM ID from active service.';
+        return false;
+    }
+    
+    $this->vmId = $vmId;
+    
+    // Step 4: Get VM details
+    $vmDetailsUrl = "https://cloud.fibacloud.com/api/service/{$this->orderId}/vms/{$vmId}";
+    $vmDetailsResponse = $this->callAPI('GET', $vmDetailsUrl);
+
+    if (!isset($vmDetailsResponse['vm'])) {
+        $this->error = 'VM details could not be retrieved.';
+        return false;
+    }
+    
+    $vm = $vmDetailsResponse['vm'];
+
+    return [
+        'ip' => $vm['ipv4'],
+        'assigned_ips' => [$vm['ipv4'], $vm['ipv6']],
+        'login' => [
+            'username' => $vm['username'],
+            'password' => $vm['password'],
+        ],
+        'config' => [
+            'vm_id' => $vm['id'],
+            'orderId' => $this->orderId,
+            'status' => $vm['status'],
+            'memory' => $vm['memory'],
+            'disk' => $vm['disk'],
+            'uptime' => $vm['uptime'],
+            'template_name' => $vm['template_name'],
+            'cores' => $vm['cores'],
+            'sockets' => $vm['sockets'],
+            'mac' => $vm['mac'],
+            'label' => $vm['label'],
+            'cpus' => $vm['cpus'],
+        ],
+    ];
+}
+
+/**
+ * Wait for service to become active and return VM ID
+ */
+private function waitForServiceActive($orderId, $maxWait = 300) { // 5 minutes max wait
+    $start = time();
+    
+    while (time() - $start < $maxWait) {
+        $orderDetailsUrl = "https://cloud.fibacloud.com/api/service/{$orderId}/vms/";
+        $orderDetailsResponse = $this->callAPI('GET', $orderDetailsUrl);
+        
+        if (!$orderDetailsResponse) {
+            sleep(10);
+            continue;
+        }
+        
+        // Check if service is active and has VMs
+        if (isset($orderDetailsResponse['vms']) && !empty($orderDetailsResponse['vms'])) {
+            $vmId = array_key_first($orderDetailsResponse['vms']);
+            if ($vmId) {
+                return $vmId;
+            }
+        }
+        
+        // Check service status if available
+        if (isset($orderDetailsResponse['status'])) {
+            if ($orderDetailsResponse['status'] === 'active' || $orderDetailsResponse['status'] === 'running') {
+                // Service is active, wait a bit more for VMs to be ready
+                sleep(15);
+                continue;
+            } elseif ($orderDetailsResponse['status'] === 'cancelled' || $orderDetailsResponse['status'] === 'failed') {
+                $this->error = 'Service creation failed with status: ' . $orderDetailsResponse['status'];
+                return false;
+            }
+        }
+        
+        sleep(10);
+    }
+    
+    $this->error = 'Service did not become active within ' . ($maxWait / 60) . ' minutes.';
+    return false;
 }
 
 public function suspend() {
@@ -968,5 +1072,51 @@ public function reboot() {
         ]);
     }
     return isset($result['status']) && $result['status'] === true;
+}
+
+/**
+ * Test API connectivity and authentication
+ */
+public function testConnection() {
+    try {
+        $username = $this->server["username"];
+        $password = $this->server["password"];
+        
+        if (empty($username) || empty($password)) {
+            return [
+                'status' => 'error',
+                'message' => 'Username or password is empty'
+            ];
+        }
+        
+        // Test API connection by getting available products
+        $testUrl = "https://cloud.fibacloud.com/api/order";
+        $response = $this->callAPI('GET', $testUrl);
+        
+        if (!$response) {
+            return [
+                'status' => 'error',
+                'message' => 'Failed to connect to API or authentication failed'
+            ];
+        }
+        
+        if (isset($response['error']) || isset($response['message'])) {
+            return [
+                'status' => 'error',
+                'message' => 'API Error: ' . ($response['error'] ?? $response['message'])
+            ];
+        }
+        
+        return [
+            'status' => 'success',
+            'message' => 'API connection successful'
+        ];
+        
+    } catch (Exception $e) {
+        return [
+            'status' => 'error',
+            'message' => 'Exception: ' . $e->getMessage()
+        ];
+    }
 }
 }
